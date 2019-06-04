@@ -1,4 +1,4 @@
-package de.thro.inf.prg3.a11.util;
+package ohm.softa.a11.util;
 
 import java.util.LinkedList;
 import java.util.List;

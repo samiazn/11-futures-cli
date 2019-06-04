@@ -1,14 +1,16 @@
-package de.thro.inf.prg3.a11;
+package ohm.softa.a11;
 
-import de.thro.inf.prg3.a11.openmensa.OpenMensaAPI;
-import de.thro.inf.prg3.a11.openmensa.OpenMensaAPIService;
-import de.thro.inf.prg3.a11.openmensa.model.Canteen;
-import de.thro.inf.prg3.a11.openmensa.model.Meal;
-import de.thro.inf.prg3.a11.openmensa.model.PageInfo;
+import ohm.softa.a11.openmensa.OpenMensaAPI;
+import ohm.softa.a11.openmensa.OpenMensaAPIService;
+import ohm.softa.a11.openmensa.model.Canteen;
+import ohm.softa.a11.openmensa.model.Meal;
+import ohm.softa.a11.openmensa.model.PageInfo;
+import ohm.softa.a11.util.ListUtil;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.IntStream;
 
@@ -16,7 +18,7 @@ import java.util.stream.IntStream;
  * @author Peter Kurfer
  * Created on 12/16/17.
  */
-public class App2 {
+public class App {
 	private static final String OPEN_MENSA_DATE_FORMAT = "yyyy-MM-dd";
 
 	private static final SimpleDateFormat dateFormat = new SimpleDateFormat(OPEN_MENSA_DATE_FORMAT, Locale.getDefault());
@@ -58,43 +60,53 @@ public class App2 {
 	 */
 	private static void printCanteens() throws ExecutionException, InterruptedException {
 		System.out.print("Fetching canteens [");
-		openMensaAPI.getCanteens().thenApply(response -> {
-			System.out.print("#");
-			PageInfo pageInfo = PageInfo.extractFromResponse(response);
-
-			List<Canteen> allCanteens;
-
-			/* unwrapping the response body */
-			if (response.body() == null) {
-				/* fallback to empty list if response body was empty */
-				allCanteens = new LinkedList<>();
-			} else {
-				allCanteens = response.body();
-			}
-
-			/* iterate all pages
-			 * 2 to including 8 because page index is not 0 indexed */
-			for (int i = 2; i <= pageInfo.getTotalCountOfPages(); i++) {
+		openMensaAPI.getCanteens()
+			.thenApply(response -> {
 				System.out.print("#");
-				try {
-					/* you can block this thread with `get` because we are already in a
-					 * background thread because of `thenApply` */
-					allCanteens.addAll(openMensaAPI.getCanteens(i).get());
-				} catch (InterruptedException | ExecutionException e) {
-					System.out.println("Error while retrieving canteens");
-				}
-			}
+				PageInfo pageInfo = PageInfo.extractFromResponse(response);
+				List<Canteen> allCanteens;
 
-			System.out.println("]");
-			/* sort the canteens by their id and return them */
-			allCanteens.sort(Comparator.comparing(Canteen::getId));
-			return allCanteens;
-		}).thenAccept(canteens -> {
-			/* print all canteens to STDOUT */
-			for (Canteen c : canteens) {
-				System.out.println(c);
-			}
-		}).get(); /* block the thread by calling `get` to ensure that all results are retrieved when the method is completed */
+				/* unwrapping the response body */
+				if (response.body() == null) {
+					/* fallback to empty list if response body was empty */
+					allCanteens = new LinkedList<>();
+				} else {
+					allCanteens = response.body();
+				}
+
+				/* declare variable to be able to use `thenCombine` */
+				CompletableFuture<List<Canteen>> remainingCanteensFuture = null;
+
+				for (int i = 2; i <= pageInfo.getTotalCountOfPages(); i++) {
+					System.out.print("#");
+					/* if we're fetching the first page the future is null and has to be assigned */
+					if (remainingCanteensFuture == null) {
+						remainingCanteensFuture = openMensaAPI.getCanteens(i);
+					} else {
+						/* from the second page on the futures are combined
+						 * to combine a future with another you have to provide a function to combine the results */
+						remainingCanteensFuture = remainingCanteensFuture.thenCombine(openMensaAPI.getCanteens(i), ListUtil::mergeLists);
+					}
+				}
+
+				try {
+					/* collect all retrieved in one list */
+					allCanteens.addAll(remainingCanteensFuture.get());
+				} catch (InterruptedException | ExecutionException e) {
+					e.printStackTrace();
+				}
+				System.out.println("]");
+				/* sort the retrieved canteens by their ids and return them */
+				allCanteens.sort(Comparator.comparing(Canteen::getId));
+				return allCanteens;
+			})
+			.thenAccept(canteens -> {
+				/* print all canteens to STDOUT */
+				for (Canteen c : canteens) {
+					System.out.println(c);
+				}
+			})
+			.get(); /* block the thread by calling `get` to ensure that all results are retrieved when the method is completed */
 	}
 
 	/**
@@ -112,24 +124,27 @@ public class App2 {
 		final String dateString = dateFormat.format(currentDate.getTime());
 
 		/* fetch the state of the canteen */
-		openMensaAPI.getCanteenState(currentCanteenId, dateString).thenApply(state -> {
-			/* if canteen is open fetch the meals */
-			if (state != null && !state.isClosed()) {
-				try {
-					return openMensaAPI.getMeals(currentCanteenId, dateString).get();
-				} catch (InterruptedException | ExecutionException e) {
+		openMensaAPI.getCanteenState(currentCanteenId, dateString)
+			.thenApply(state -> {
+				/* if canteen is open fetch the meals */
+				if (state != null && !state.isClosed()) {
+					try {
+						return openMensaAPI.getMeals(currentCanteenId, dateString).get();
+					} catch (InterruptedException | ExecutionException e) {
+					}
+				} else {
+					/* if canteen is not open - print a message and return */
+					System.out.println(String.format("Seems like the canteen has closed on this date: %s", dateFormat.format(currentDate.getTime())));
 				}
-			} else {
-				/* if canteen is not open - print a message and return */
-				System.out.println(String.format("Seems like the canteen has closed on this date: %s", dateFormat.format(currentDate.getTime())));
-			}
-			return new LinkedList<Meal>();
-		}).thenAccept(meals -> {
-			/* print the retrieved meals to the STDOUT */
-			for (Meal m : meals) {
-				System.out.println(m);
-			}
-		}).get(); /* block the thread by calling `get` to ensure that all results are retrieved when the method is completed */
+				return new LinkedList<Meal>();
+			})
+			.thenAccept(meals -> {
+				/* print the retrieved meals to the STDOUT */
+				for (Meal m : meals) {
+					System.out.println(m);
+				}
+			})
+			.get(); /* block the thread by calling `get` to ensure that all results are retrieved when the method is completed */
 	}
 
 	/**
@@ -198,4 +213,3 @@ public class App2 {
 		}
 	}
 }
-
