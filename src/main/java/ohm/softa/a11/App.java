@@ -2,14 +2,12 @@ package ohm.softa.a11;
 
 import ohm.softa.a11.openmensa.OpenMensaAPI;
 import ohm.softa.a11.openmensa.OpenMensaAPIService;
+import ohm.softa.a11.openmensa.model.Canteen;
 import ohm.softa.a11.openmensa.model.PageInfo;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.Locale;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.IntStream;
 
@@ -63,9 +61,24 @@ public class App {
 			})
 		);
 
-//		System.out.println(openMensaAPI.getCanteens()
-//			.thenApply(PageInfo::extractFromResponse).thenApply(x -> x.getTotalCountOfPages()).get());
+		System.out.println(openMensaAPI.getCanteens().
+			thenApply(PageInfo::extractFromResponse)
+			.thenAccept(x->{
+				for (int i = 1; i <= x.getTotalCountOfPages(); i++) {
+					try {
+						var canteens = openMensaAPI.getCanteens(i).get();
+						for (Canteen canteen: canteens) {
+							System.out.println(canteen.getId()+" :"+canteen.getName());
+						}
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					} catch (ExecutionException e) {
+						e.printStackTrace();
+					}
+				}
 
+			})
+		);
 
 		/* TODO fetch all canteens and print them to STDOU
 		 * at first get a page without an index to be able to extract the required pagination information
