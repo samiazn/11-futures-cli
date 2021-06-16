@@ -53,15 +53,16 @@ public class App {
 		System.out.print("Fetching canteens [");
 
 
-		System.out.println(openMensaAPI.getCanteens().
+		openMensaAPI.getCanteens().
 			thenApply(PageInfo::extractFromResponse)
-			.thenApply(x->{
+			.thenApply(x -> {
 				LinkedList<Canteen> canteens = new LinkedList<>();
 				for (int i = 1; i <= x.getTotalCountOfPages(); i++) {
 					try {
 						for (Canteen canteen : openMensaAPI.getCanteens(i).get()) {
 							canteens.add(canteen);
-						};
+						}
+						;
 
 					} catch (InterruptedException e) {
 						e.printStackTrace();
@@ -69,13 +70,12 @@ public class App {
 						e.printStackTrace();
 					}
 				}
-			return canteens;
-			}).thenAccept(x->{
-				for (Canteen canteen: x) {
-					System.out.println(canteen.getId()+" :"+canteen.getName());
+				return canteens;
+			}).thenAccept(x -> {
+				for (Canteen canteen : x) {
+					System.out.println(canteen.getId() + " :" + canteen.getName());
 				}
-			})
-		);
+			}).join();
 
 		/* TODO fetch all canteens and print them to STDOU
 		 * at first get a page without an index to be able to extract the required pagination information
