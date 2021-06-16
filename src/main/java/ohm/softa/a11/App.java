@@ -51,32 +51,29 @@ public class App {
 
 	private static void printCanteens() throws ExecutionException, InterruptedException {
 		System.out.print("Fetching canteens [");
-		System.out.println(openMensaAPI.getCanteens()
-			.thenApply(PageInfo::extractFromResponse)
-			.thenApply(x->{
-				for (int i = 0; i < x.getTotalCountOfPages(); i++) {
 
-				}
-				return "";
-			})
-		);
 
 		System.out.println(openMensaAPI.getCanteens().
 			thenApply(PageInfo::extractFromResponse)
-			.thenAccept(x->{
+			.thenApply(x->{
+				LinkedList<Canteen> canteens = new LinkedList<>();
 				for (int i = 1; i <= x.getTotalCountOfPages(); i++) {
 					try {
-						var canteens = openMensaAPI.getCanteens(i).get();
-						for (Canteen canteen: canteens) {
-							System.out.println(canteen.getId()+" :"+canteen.getName());
-						}
+						for (Canteen canteen : openMensaAPI.getCanteens(i).get()) {
+							canteens.add(canteen);
+						};
+
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					} catch (ExecutionException e) {
 						e.printStackTrace();
 					}
 				}
-
+			return canteens;
+			}).thenAccept(x->{
+				for (Canteen canteen: x) {
+					System.out.println(canteen.getId()+" :"+canteen.getName());
+				}
 			})
 		);
 
